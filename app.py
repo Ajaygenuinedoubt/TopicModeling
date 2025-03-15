@@ -14,31 +14,42 @@ app = Flask(__name__)
 nltk.download('stopwords')
 
 # Load the saved LDA model and dictionary
-lda_model = LdaModel.load("lda_model.pkl")
-dictionary = Dictionary.load("dictionary.pkl")
+try:
+    lda_model = LdaModel.load("lda_model.pkl")
+    dictionary = Dictionary.load("dictionary.pkl")
+except Exception as e:
+    print(f"Error loading model or dictionary: {e}")
 
 # Preprocess the text input
 def preprocess_text(text):
-    text = re.sub(r'\n', ' ', text)  # Remove newlines
-    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
-    text = text.lower()  # Convert to lowercase
-    stop_words = set(stopwords.words('english'))
-    text = ' '.join([word for word in text.split() if word not in stop_words])  # Remove stopwords
-    return text
+    try:
+        text = re.sub(r'\n', ' ', text)  # Remove newlines
+        text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
+        text = text.lower()  # Convert to lowercase
+        stop_words = set(stopwords.words('english'))
+        text = ' '.join([word for word in text.split() if word not in stop_words])  # Remove stopwords
+        return text
+    except Exception as e:
+        print(f"Error in text preprocessing: {e}")
+        raise e  # Raise the error to the main try-except block
 
 # Get LDA topics and word count per topic
 def get_lda_topics(model, corpus, num_topics=5):
-    topics = model.get_document_topics(corpus)
-    topic_words = []
-    topic_word_counts = []
-    for topic_id, _ in topics:
-        words = model.show_topic(topic_id, topn=50)  # Get the top words for each topic
-        word_list = [word for word, _ in words]
-        topic_words.append(word_list)
-        # Count word occurrences for each topic
-        word_count = sum([corpus.count(dictionary.token2id[word]) for word in word_list if word in dictionary.token2id])
-        topic_word_counts.append(word_count)
-    return topic_words, topic_word_counts
+    try:
+        topics = model.get_document_topics(corpus)
+        topic_words = []
+        topic_word_counts = []
+        for topic_id, _ in topics:
+            words = model.show_topic(topic_id, topn=50)  # Get the top words for each topic
+            word_list = [word for word, _ in words]
+            topic_words.append(word_list)
+            # Count word occurrences for each topic
+            word_count = sum([corpus.count(dictionary.token2id[word]) for word in word_list if word in dictionary.token2id])
+            topic_word_counts.append(word_count)
+        return topic_words, topic_word_counts
+    except Exception as e:
+        print(f"Error in generating topics: {e}")
+        raise e
 
 # Index route
 @app.route('/', methods=['GET', 'POST'])
@@ -67,7 +78,7 @@ def index():
         except Exception as e:
             # Log the exception and return a user-friendly error message
             print(f"Error processing text: {e}")
-            return render_template('index.html', topics=[], error="An error occurred while processing the text.")
+            return render_template('index.html', topics=[], error="An error occurred while processing the text. Please check the input or server logs for details.")
     
     # For GET request, simply render the form
     return render_template('index.html', topics=[])
