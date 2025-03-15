@@ -5,8 +5,13 @@ from gensim.corpora import Dictionary
 import pandas as pd
 import re
 from nltk.corpus import stopwords
+import nltk
 
+# Initialize Flask app
 app = Flask(__name__)
+
+# Download stopwords if not already present
+nltk.download('stopwords')
 
 # Load the saved LDA model and dictionary
 lda_model = LdaModel.load("lda_model.pkl")
@@ -21,41 +26,57 @@ def preprocess_text(text):
     text = ' '.join([word for word in text.split() if word not in stop_words])  # Remove stopwords
     return text
 
-# Get LDA topics and their word counts
+# Get LDA topics and word count per topic
 def get_lda_topics(model, corpus, num_topics=5):
     topics = model.get_document_topics(corpus)
     topic_words = []
-    topic_word_count = []
-    
-    # For each topic in the document
-    for topic_id, topic_prob in topics:
+    topic_word_counts = []
+    for topic_id, _ in topics:
         words = model.show_topic(topic_id, topn=50)  # Get the top words for each topic
-        topic_words.append([word for word, _ in words])
-        
-        # Calculate word count based on BoW
-        word_count = sum([count for word_id, count in corpus if dictionary[word_id] in dict(words)])
-        topic_word_count.append(word_count)
-    
-    return topic_words, topic_word_count
+        word_list = [word for word, _ in words]
+        topic_words.append(word_list)
+        # Count word occurrences for each topic
+        word_count = sum([corpus.count(dictionary.token2id[word]) for word in word_list if word in dictionary.token2id])
+        topic_word_counts.append(word_count)
+    return topic_words, topic_word_counts
 
+# Index route
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        # Get the input text from the form
-        text = request.form['text_input']
-        
-        # Preprocess the text
-        cleaned_text = preprocess_text(text)
-        
-        # Convert the cleaned text into a corpus format for LDA
-        bow_vector = dictionary.doc2bow(cleaned_text.split())
-        
-        # Get the topics and their word counts for the input text
-        topics, topic_word_count = get_lda_topics(lda_model, bow_vector)
-        
-        return render_template('index.html', topics=topics, topic_word_count=topic_word_count)
-    
-    return render_template('index.html', topics=[], topic_word_count=[])
+        try:
+            # Get the input text from the form
+            text = request.form['text_input']
 
+            # Check if the text is empty
+            if not text.strip():
+                return render_template('index.html', topics=[], error="Text input cannot be empty.")
+            
+            # Preprocess the text
+            cleaned_text = preprocess_text(text)
+
+            # Convert the cleaned text into a corpus format for LDA
+            bow_vector = dictionary.doc2bow(cleaned_text.split())
+
+            # Get the topics and word counts for the input text
+            topics, topic_word_counts = get_lda_topics(lda_model, bow_vector)
+
+            # Render the template with topics and word counts
+            return render_template('index.html', topics=topics, word_counts=topic_word_counts)
+
+        except Exception as e:
+            # Log the exception and return a user-friendly error message
+            print(f"Error processing text: {e}")
+            return render_template('index.html', topics=[], error="An error occurred while processing the text.")
+    
+    # For GET request, simply render the form
+    return render_template('index.html', topics=[])
+
+# Error handling for 500 internal server errors
+@app.errorhandler(500)
+def internal_error(error):
+    return "500 error: An internal error occurred. Please try again.", 500
+
+# Run the Flask app
 if __name__ == "__main__":
     app.run(debug=True)
